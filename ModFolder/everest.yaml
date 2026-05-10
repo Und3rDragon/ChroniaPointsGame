@@ -1,0 +1,6 @@
+- Name: ChroniaPointsGame
+  Version: 1.0.0
+  DLL: Code/ChroniaPointsGame.dll
+  Dependencies:
+    - Name: Everest
+      Version: 1.6286.0
