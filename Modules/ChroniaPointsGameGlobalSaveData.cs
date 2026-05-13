@@ -6,34 +6,29 @@ namespace ChroniaPointsGame.Modules;
 
 public class ChroniaPointsGameGlobalSaveData : ChroniaPointsGameModuleGlobalSaveData
 {
-    [ChroniaGlobalSavePath]
-    public HashSet<string> flags = new();
-    [ChroniaGlobalSavePath]
-    public Dictionary<string, int> counters = new();
-    [ChroniaGlobalSavePath]
-    public Dictionary<string, float> sliders = new();
-    [ChroniaGlobalSavePath]
-    public Dictionary<string, string> permaKeys = new();
+    public HashSet<string> flags { get; set; }= new();
+    public Dictionary<string, int> counters { get; set; }= new();
+    public Dictionary<string, float> sliders { get; set; } = new();
+    public Dictionary<string, string> permaKeys { get; set; } = new();
     
-    [ChroniaGlobalSavePath]
     public int Fun { get; set; } = 0;
 
     // Chronia Game SaveData
-    [ChroniaGlobalSavePath("ChroniaPointsGame/Points.xml")]
+    [ChroniaGlobalSavePath("Points.yaml")]
     public BigInteger TruePoints { get; set; } = BigInteger.Zero;
 
-    [ChroniaGlobalSavePath("ChroniaPointsGame/Points.xml")]
+    [ChroniaGlobalSavePath("Points.yaml")]
     public DateTime LastUpdateTimeUtc { get; set; } = DateTime.UtcNow;
-    [ChroniaGlobalSavePath("ChroniaPointsGame/Points.xml")]
+    [ChroniaGlobalSavePath("Points.yaml")]
     public int MaxStrawberries { get; set; } = 0;
-    [ChroniaGlobalSavePath("ChroniaPointsGame/Points.xml")]
+    [ChroniaGlobalSavePath("Points.yaml")]
     public int MaxGoldenStrawberries { get; set; } = 0;
-    [ChroniaGlobalSavePath("ChroniaPointsGame/Points.xml")]
+    [ChroniaGlobalSavePath("Points.yaml")]
     public int MaxHeartGems { get; set; } = 0;
-    [ChroniaGlobalSavePath("ChroniaPointsGame/Points.xml")]
+    [ChroniaGlobalSavePath("Points.yaml")]
     public int MoonberryGet { get; set; } = 0;
-    [ChroniaGlobalSavePath("ChroniaPointsGame/Points.xml")]
+    [ChroniaGlobalSavePath("Points.yaml")]
     public int DashlessBerryGet { get; set; } = 0;
-    [ChroniaGlobalSavePath("ChroniaPointsGame/Points.xml")]
+    [ChroniaGlobalSavePath("Points.yaml")]
     public int MaxCassettes { get; set; } = 0;
 }
