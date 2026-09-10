@@ -1,4 +1,10 @@
-﻿namespace ChroniaPointsGame.Utils.ChroniaSystem;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace ChroniaPointsGame.Utils.ChroniaSystem;
 
 public static class ChroniaSliderUtils
 {
@@ -12,9 +18,19 @@ public static class ChroniaSliderUtils
         return 0f;
     }
 
+    public static float GetSlider(this string name, float fallback)
+    {
+        if (MaP.sliders.TryGetValue(name, out var slider))
+        {
+            return slider.Value;
+        }
+
+        return fallback;
+    }
+
     public static void SetSlider(this string name, float value)
     {
-        MaP.level?.Session.SetSlider(name, value);
+        MaP.level?.Session?.SetSlider(name, value);
     }
 
     public static void SetSlider(this ICollection<string> source, float state)

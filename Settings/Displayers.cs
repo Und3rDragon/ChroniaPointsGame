@@ -1,4 +1,5 @@
-﻿using ChroniaPointsGame.Modules;
+﻿using System.Numerics;
+using ChroniaPointsGame.Modules;
 using ChroniaPointsGame.Cores;
 using ChroniaPointsGame.Cores.Graphical;
 using ChroniaPointsGame.Utils;
@@ -31,8 +32,13 @@ public class Displayers : HDRenderEntity
 
     public static void OnLevelEnd(On.Celeste.Level.orig_End orig, Level self)
     {
-        Instance.Buffer?.Dispose();
-        self.Remove(Instance);
+        if (Instance.IsNotNull())
+        {
+            Instance.Buffer?.Dispose();
+            self.Remove(Instance);
+
+            Instance = null;
+        }
 
         orig(self);
     }
@@ -44,53 +50,105 @@ public class Displayers : HDRenderEntity
 
     protected override void HDRender()
     {
-        if (ChroniaPointsGameModule.Settings.chroniaPointsDisplayer.enabled)
-        {
-            var displayer = ChroniaPointsGameModule.Settings.chroniaPointsDisplayer;
-            var displayUI = chroniaPoints_UI;
-            
-            string num = CPGame.ParsedPoints.ToString();
-            if(num.Length >= 18)
-            {
-                int n = num.Length / 3;
-                if(num.Length - 3* n == 0) { n = n - 1; }
+        if (!ChroniaPointsGameModule.Settings.chroniaPointsDisplayer.enabled) { return; }
 
-                string sub1 = num.Substring(0, num.Length - 3 * n);
-                string sub2 = num.Substring(num.Length - 3 * n, 2);
+        var displayer = ChroniaPointsGameModule.Settings.chroniaPointsDisplayer;
+        var displayUI = chroniaPoints_UI;
 
-                num = $"{sub1}.{sub2}E+{3 * n}";
-            }
-            
-            string target = $"{num} Chronia Points";
-            if(CPGame.OverallBase != 1)
-            {
-                target = target + $" (x{CPGame.OverallBase:0.00}";
-            }
-            if(CPGame.OverallPow != 1)
-            {
-                target = target + $"P{CPGame.OverallPow}";
-            }
-            target = target + ")";
+        displayUI.origin = ((int)displayer.aligning + 4).ToJustify();
+        displayUI.distance = displayer.letterDistance;
+        displayUI.scale = displayer.scale * 0.1f;
 
-            displayUI.origin = ((int)displayer.aligning + 4).ToJustify();
-            displayUI.distance = displayer.letterDistance;
-            displayUI.scale = displayer.scale * 0.1f;
-
-            displayUI.Render(target, (c) =>
-            {
-                return generalReference.Contains(c) ? generalReference.IndexOf(c) : generalReference.IndexOf(" ");
-            }, GetRenderPosition(displayer.displayPosition,
-                new Vc2(displayer.X, displayer.Y)));
-        }
+        displayUI.Render(GetDisplayTarget(), GeneralSelector, GetRenderPosition(displayer.displayPosition,
+            new Vc2(displayer.X, displayer.Y)));
     }
 
-    public string generalReference = Cons.DisplayFontsReference;
+    // ---- 显示文本缓存：积分与倍率都没变化时复用上一次拼好的字符串 ----
+    private BigInteger cachedPoints;
+    private double cachedOverallBase;
+    private float cachedOverallPow;
+    private bool hasCachedTarget = false;
+    private string cachedTarget;
+
+    private string GetDisplayTarget()
+    {
+        BigInteger points = CPGame.ParsedPoints;
+        double overallBase = CPGame.OverallBase;
+        float overallPow = CPGame.OverallPow;
+
+        if (hasCachedTarget
+            && points == cachedPoints
+            && overallBase == cachedOverallBase
+            && overallPow == cachedOverallPow)
+        {
+            return cachedTarget;
+        }
+
+        cachedPoints = points;
+        cachedOverallBase = overallBase;
+        cachedOverallPow = overallPow;
+        hasCachedTarget = true;
+        cachedTarget = BuildDisplayTarget(points, overallBase, overallPow);
+
+        return cachedTarget;
+    }
+
+    private static string BuildDisplayTarget(BigInteger points, double overallBase, float overallPow)
+    {
+        string num = points.ToString();
+        if(num.Length >= 18)
+        {
+            int n = num.Length / 3;
+            if(num.Length - 3* n == 0) { n = n - 1; }
+
+            string sub1 = num.Substring(0, num.Length - 3 * n);
+            string sub2 = num.Substring(num.Length - 3 * n, 2);
+
+            num = $"{sub1}.{sub2}E+{3 * n}";
+        }
+
+        string target = $"{num} Chronia Points";
+        if(overallBase != 1)
+        {
+            target = target + $" (x{overallBase:0.00}";
+        }
+        if(overallPow != 1)
+        {
+            target = target + $"P{overallPow}";
+        }
+        target = target + ")";
+
+        return target;
+    }
+
+    // ---- 静态字符映射与 selector：固定引用 + O(1) 查表，避免每字符两次线性扫描 ----
+    private static readonly int[] GeneralCharIndex = BuildGeneralCharIndex();
+    private static readonly Func<char, int> GeneralSelector = static c =>
+    {
+        int idx = GeneralCharIndex[c];
+        return idx >= 0 ? idx : GeneralCharIndex[' '];
+    };
+
+    private static int[] BuildGeneralCharIndex()
+    {
+        var arr = new int[char.MaxValue + 1];
+        Array.Fill(arr, -1);
+        string reference = Cons.DisplayFontsReference;
+        for (int i = 0; i < reference.Length; i++)
+        {
+            if (arr[reference[i]] == -1) { arr[reference[i]] = i; }
+        }
+        // 保证空格映射存在
+        arr[' '] = reference.IndexOf(' ');
+
+        return arr;
+    }
 
     public SerialImageRaw chroniaPoints_UI = new SerialImageRaw(GFX.Game.GetAtlasSubtextures("ChroniaPointsGame/DisplayFonts/font"))
     {
         segmentOrigin = Vc2.Zero,
     };
-    
+
     public Vc2 GetRenderPosition(ChroniaPointsGameSettings.DisplayPosition pos, Vc2 setup)
     {
         if (pos == ChroniaPointsGameSettings.DisplayPosition.PlayerBased)

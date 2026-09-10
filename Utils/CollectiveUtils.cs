@@ -1,5 +1,13 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Data.SqlTypes;
+using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text;
+using System.Threading.Tasks;
+
+using AreaDataExt = On.Celeste.AreaDataExt;
 
 namespace ChroniaPointsGame.Utils;
 
@@ -130,69 +138,6 @@ public static class CollectiveUtils
         }
     }
 
-    public static void SafeRemove<TKey, TValue>(
-    this ICollection<KeyValuePair<TKey, TValue>> collection,
-    TKey key)
-    {
-        if (collection is IDictionary<TKey, TValue> dict)
-        {
-            dict.Remove(key);
-            return;
-        }
-
-        var itemsToRemove = collection
-            .Where(kvp => Equals(kvp.Key, key))
-            .ToList();
-
-        foreach (var item in itemsToRemove)
-        {
-            collection.Remove(item);
-        }
-    }
-
-    public static void SafeRemove<TypeA>(this ICollection<TypeA> list, TypeA key)
-    {
-        if (list.Contains(key))
-        {
-            list.Remove(key);
-        }
-    }
-
-    public static TValue SafeGet<TKey, TValue>(
-    this ICollection<KeyValuePair<TKey, TValue>> collection,
-    TKey key, TValue defaultValue)
-    {
-        foreach (var item in collection)
-        {
-            if (item.Key.Equals(key))
-            {
-                return item.Value;
-            }
-        }
-
-        return defaultValue;
-    }
-
-    public static TypeA SafeGet<TypeA>(this ICollection<TypeA> list, TypeA key, TypeA ifNotExist)
-    {
-        if (list.Contains(key))
-        {
-            return key;
-        }
-
-        return ifNotExist;
-    }
-
-    public static TypeA SafeGet<TypeA>(this IList<TypeA> list, int at, TypeA ifNotExist)
-    {
-        if (at < list.Count)
-        {
-            return list[at];
-        }
-
-        return ifNotExist;
-    }
-
     public static void Replace<T>(this ICollection<T> dic, T find, T replaceWith)
     {
         foreach (var i in dic)
@@ -206,7 +151,7 @@ public static class CollectiveUtils
     }
     public static void Replace<TypeA, TypeB>(this Dictionary<TypeA, TypeB> dictionary, TypeA oldKey, TypeA newKey, TypeB newValue)
     {
-        dictionary.SafeRemove(oldKey);
+        dictionary.Remove(oldKey);
         dictionary.Enter(newKey, newValue);
     }
 
@@ -552,7 +497,6 @@ public static class CollectiveUtils
         return result;
     }
 
-
     /// <summary>
     /// 对集合中的每个元素执行指定操作，并传递索引
     /// </summary>
@@ -768,35 +712,18 @@ public static class CollectiveUtils
         values = new List<TValue>(dic.Values); // 或 dic.Select(kvp => kvp.Value).ToList()
     }
 
-    public static bool CombineDictionary<TKey, TValue>(
-        this IList<TKey> keys,
-        IList<TValue> values,
-        out IDictionary<TKey, TValue> dic,
-        bool allowDuplicateKeys = false)
+    public static Dictionary<T1, T2> Overwrite<T1, T2>(this Dictionary<T1, T2> orig, Dictionary<T1, T2> input)
     {
-        dic = null;
-
-        if (keys == null || values == null || keys.Count != values.Count || keys.Count == 0)
-            return false;
-
-        dic = new Dictionary<TKey, TValue>();
-
-        for (int i = 0; i < keys.Count; i++)
+        foreach (var key in input.Keys)
         {
-            if (dic.ContainsKey(keys[i]))
-            {
-                if (!allowDuplicateKeys)
-                    return false; // 或抛异常
-                continue;
-            }
-            dic[keys[i]] = values[i];
+            orig[key] = input[key];
         }
 
-        return true;
+        return orig;
     }
 
-    public static bool TryGet<T, Target>(this ICollection<T> source, Predicate<T> condition, out Target result)
-        where Target : ICollection<T>, new()
+    public static bool TryGet<T>(this ICollection<T> source, 
+        Predicate<T> condition, out List<T> result)
     {
         bool match = false;
         result = new();
@@ -859,22 +786,21 @@ public static class CollectiveUtils
     }
 
 
-    public static bool TryGet<T>(this IList<T> source, int index, out T? result)
-        where T : struct
+    public static bool TryGet<T>(this IList<T> source, int index, out T result)
     {
         if (source.IsNull())
         {
-            result = null;
+            result = default(T);
             return false;
         }
         if (source.Count == 0)
         {
-            result = null;
+            result = default(T);
             return false;
         }
         if (index >= source.Count)
         {
-            result = null;
+            result = default(T);
             return false;
         }
 
@@ -1171,4 +1097,26 @@ public static class CollectiveUtils
 
         return true;
     }
+
+    public static Dictionary<TKey, List<TItem>> CatagorizeList<TKey, TItem>(
+        this List<TItem> source,
+        Func<int, TItem, TKey> keyCreator)
+    where TItem : new()
+    {
+        Dictionary<TKey, List<TItem>> dict = new();
+        
+        int index = 0;
+        for (index = 0; index < source.Count; index++)
+        {
+            TItem item = source[index];
+            TKey key = keyCreator(index, item);
+            
+            dict.Create(key, new());
+            dict[key].Add(item);
+        }
+
+        return dict;
+    }
+
+    public static int DefaultKeyifyWithIndex<Item>(int index, Item item) => index;
 }

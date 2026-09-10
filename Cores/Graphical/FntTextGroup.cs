@@ -1,9 +1,20 @@
-﻿using ChroniaPointsGame.Utils;
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics.Metrics;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using ChroniaPointsGame.Utils;
 
 namespace ChroniaPointsGame.Cores.Graphical;
 
 public class FntTextGroup
 {
+    /// <summary>
+    /// 固定 char→int 转换器引用，保证 string 路径 Measure 缓存可命中
+    /// </summary>
+    private static readonly Func<char, int> CharCodeSelector = (c) => (int)c;
+
     public List<FntText> members = new();
     /// <summary>
     /// An empty template defining member parameters
@@ -86,9 +97,9 @@ public class FntTextGroup
     /// <param name="selector">The deepest reflection of the function returning integers as the texture index</param>
     public void Measure<T>(IList<IList<T>> source, Func<T, int> selector)
     {
-        members = new();
-        
-        for(int i = 0; i < source.Count; i++)
+        members.Clear();
+
+        for (int i = 0; i < source.Count; i++)
         {
             FntText image = cachedText[i.ClampMax(cachedText.Count - 1)];
             image.origin = template.origin;
@@ -97,34 +108,34 @@ public class FntTextGroup
             image.renderMode = template.renderMode;
             image.distance = template.distance;
             image.color = template.color;
-            if(scales.TryGetOrGetLast(i, out float? scale))
+            if (scales.TryGetOrGetLast(i, out float? scale))
             {
-                image.scale = scale?? 1f;
+                image.scale = scale ?? 1f;
             }
             else
             {
                 image.scale = 1f;
             }
-            if(depths.TryGetOrGetLast(i, out float? depth))
+            if (depths.TryGetOrGetLast(i, out float? depth))
             {
-                image.depth = depth?? 0f;
+                image.depth = depth ?? 0f;
             }
             else
             {
                 image.depth = 0f;
             }
-            image.Measure(source[i], (item) => selector(item));
+            image.Measure(source[i], selector);
             members.Add(image);
         }
 
         // Mapping members
         Vc2 cal = groupTopleft = groupBottomRight = Vc2.Zero;
-        memberPosition = new();
-        groupSize = new();
-        
-        for(int i = 0; i < members.Count; i++)
+        memberPosition.Clear();
+        groupSize = Vc2.Zero;
+
+        for (int i = 0; i < members.Count; i++)
         {
-            if(i == 0)
+            if (i == 0)
             {
                 memberPosition.Add(cal);
 
@@ -136,7 +147,7 @@ public class FntTextGroup
 
             cal.Y += members[i].overallSize.Y * template.origin.Y + members[i - 1].overallSize.Y * (1f - template.origin.Y) + memberDistance;
             memberPosition.Add(cal);
-            
+
             groupTopleft.X = groupTopleft.X.ClampMax(members[i].overallSize.X * template.origin.X * -1f);
             groupTopleft.Y = groupTopleft.Y.ClampMax(cal.Y + members[i].overallSize.Y * template.origin.Y * -1f);
             groupBottomRight.X = groupBottomRight.X.ClampMin(members[i].overallSize.X * (1f - template.origin.X));
@@ -149,7 +160,7 @@ public class FntTextGroup
     
     public void Measure(IList<string> source)
     {
-        members = new();
+        members.Clear();
 
         for (int i = 0; i < source.Count; i++)
         {
@@ -182,9 +193,9 @@ public class FntTextGroup
 
         // Mapping members
         Vc2 cal = groupTopleft = groupBottomRight = Vc2.Zero;
-        memberPosition = new();
-        groupSize = new();
-        
+        memberPosition.Clear();
+        groupSize = Vc2.Zero;
+
         for (int i = 0; i < members.Count; i++)
         {
             if (i == 0)
@@ -217,7 +228,7 @@ public class FntTextGroup
         for (int i = 0; i < members.Count; i++)
         {
             Vc2 dPos = groupSize * groupOrigin * -1f + memberStart + memberPosition[i] + groupOffset;
-            
+
             members[i].Render(source[i], renderPosition + new Vc2((int)dPos.X, (int)dPos.Y));
         }
     }
@@ -226,10 +237,10 @@ public class FntTextGroup
     {
         Measure(source, selector);
 
-        for(int i = 0; i < members.Count; i++)
+        for (int i = 0; i < members.Count; i++)
         {
             Vc2 dPos = groupSize * groupOrigin * -1f + memberStart + memberPosition[i] + groupOffset;
-            
+
             members[i].Render(source[i], selector, renderPosition + new Vc2((int)dPos.X, (int)dPos.Y));
         }
     }

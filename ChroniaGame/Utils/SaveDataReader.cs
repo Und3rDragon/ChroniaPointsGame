@@ -97,7 +97,7 @@ public static class SaveDataReader
                     for(int i = 0; i < celesteAreas.Count(); i++)
                     {
                         var areaElement = celesteAreas.ElementAt(i);
-                        int areaId = areaElement.Attribute("ID").Value.ParseInt(-1);
+                        int areaId = areaElement.Attribute("ID").Value.Parse(-1);
 
                         // 计算金草莓：每个 SingleRunCompleted=true 的 AreaModeStats 算一个金草莓
                         var modesElement = areaElement.Element("Modes");

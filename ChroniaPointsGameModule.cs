@@ -1,4 +1,4 @@
-using Celeste.Mod.Helpers;
+﻿using Celeste.Mod.Helpers;
 using ChroniaPointsGame.ChroniaGame.Utils;
 using ChroniaPointsGame.Cores;
 using ChroniaPointsGame.Modules;
@@ -71,7 +71,7 @@ public class ChroniaPointsGameModule : EverestModule
         ChroniaPointsGameModule.Instance = this;
 
         GlobalData = new ChroniaPointsGameGlobalSaveData();
-        GlobalData.LoadAll(); // �Զ��Ӷ�� XML �ļ�����
+        GlobalData.LoadAll(); // 读取全局存档数据
         
         On.Celeste.Celeste.OnExiting += OnGameExiting;
         
@@ -82,7 +82,7 @@ public class ChroniaPointsGameModule : EverestModule
         // ChroniaGame
         InitializeChroniaPointsGame();
         
-        CalculateOfflineIncome(); // ����ʱ������������
+        CalculateOfflineIncome(); // 结算离线收益
 
         GlobalData.Fun++;
         Log.Info($"You've been here for {GlobalData.Fun} times, eh?");
@@ -104,15 +104,15 @@ public class ChroniaPointsGameModule : EverestModule
         return false;
     }
 
-    private void OnGameExiting(On.Celeste.Celeste.orig_OnExiting orig, Celeste.Celeste self, object sender, EventArgs args)
+    private static void OnGameExiting(On.Celeste.Celeste.orig_OnExiting orig, Celeste.Celeste self, object sender, EventArgs args)
     {
         GlobalData.SaveAll();
         
         orig(self, sender, args);
     }
 
-    // �����Ҫ������UnhandledExceptionEventArgs��
-    private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
+    // 游戏异常退出时执行紧急存档
+    private static void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
         try
         {
@@ -180,13 +180,13 @@ public class ChroniaPointsGameModule : EverestModule
     }
     
     // Chronia Game
-    // ===== �������棺0.8 ��/�� =====
+    // ===== 离线收益结算 =====
     private void CalculateOfflineIncome()
     {
         var now = DateTime.UtcNow;
         var offlineSeconds = (now - GlobalData.LastUpdateTimeUtc).TotalSeconds;
 
-        // ��ȫ���ƣ���ಹ7��
+        // 最多只补 7 天
         offlineSeconds = Math.Max(0, Math.Min(offlineSeconds, 7 * 24 * 3600));
 
         if (offlineSeconds > 0)
@@ -196,6 +196,6 @@ public class ChroniaPointsGameModule : EverestModule
         }
 
         GlobalData.LastUpdateTimeUtc = now;
-        GlobalData.SaveAll(); // �������棬�����ظ�����
+        GlobalData.SaveAll(); // 立即保存，防止重复累加
     }
 }

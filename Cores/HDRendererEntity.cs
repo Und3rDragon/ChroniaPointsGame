@@ -1,9 +1,19 @@
 ﻿using Celeste.Mod.UI;
+
+
+using ChroniaPointsGame.Utils;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Graphics.PackedVector;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+
 
 namespace ChroniaPointsGame.Cores;
 
-[Note("HDRender is bugged for some reason")]
 public class HDRenderEntity : BaseEntity
 {
     public HDRenderEntity(EntityData d, Vc2 o): base(d, o)
@@ -11,23 +21,32 @@ public class HDRenderEntity : BaseEntity
         nodes = d.NodesWithPosition(o);
         ID = d.ID;
 
-        Prepare(d, o);
+        PrepareBeforeRenderHook(d, o);
 
         Tag |= TagsExt.SubHUD;
-        
+
         Add(new BeforeRenderHook(BeforeRender));
     }
-    public VirtualRenderTarget Buffer;
+    public VirtualRenderTarget Buffer = null;
     public Vc2 Parallax = Vc2.One;
     public Vc2 StaticScreen = new Vc2(160f, 90f);
     public CColor DrawColor = new CColor(Color.White);
+
+    public bool beforeRenderHookRunning = true;
     
-    public virtual void Prepare(EntityData data, Vc2 offset) { }
-    
+    public virtual void PrepareBeforeRenderHook(EntityData data, Vc2 offset) { }
+
+    [Credits("SSM24 for some technical bugfix")]
     public void BeforeRender()
     {
+        if (!beforeRenderHookRunning)
+        {
+            Buffer = null;
+            return;
+        }
+
         // Create a new render target for later renders
-        if (Buffer?.Target is null)
+        if (Buffer?.Target == null)
         {
             Buffer = VirtualContent.CreateRenderTarget("ChroniaPointsGame_HDEntity_" + ID.ToString(), 1920, 1080);
         }
@@ -70,36 +89,50 @@ public class HDRenderEntity : BaseEntity
         // Normal Render
         base.Render();
 
-        // SubHud SpriteBatch end and start rendering
-        SubHudRenderer.EndRender();
+        if(Buffer?.Target != null)
+        {
+            // SubHud SpriteBatch end and start rendering
+            SubHudRenderer.EndRender();
 
-        // Start a new SpriteBatch
-        Draw.SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, DepthStencilState.Default, RasterizerState.CullNone, ColorGrade.Effect, Engine.ScreenMatrix.M11 * 6 < 6 ? Matrix.Identity : Engine.ScreenMatrix);
+            // Start a new SpriteBatch
+            Draw.SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, DepthStencilState.Default, RasterizerState.CullNone, ColorGrade.Effect, Engine.ScreenMatrix.M11 * 6 < 6 ? Matrix.Identity : Engine.ScreenMatrix);
 
-        // Send my canvas to the SpriteBatch
-        Draw.SpriteBatch.Draw(Buffer, Vc2.Zero, null, DrawColor.Parsed(),
-            0, Vector2.Zero, 1,
-            SaveData.Instance.Assists.MirrorMode ? SpriteEffects.FlipHorizontally : SpriteEffects.None, 0);
+            // Send my canvas to the SpriteBatch
+            Draw.SpriteBatch.Draw(Buffer, Vc2.Zero, null, DrawColor.Parsed(),
+                0, Vector2.Zero, 1,
+                SaveData.Instance.Assists.MirrorMode ? SpriteEffects.FlipHorizontally : SpriteEffects.None, 0);
 
-        // End the batch and start rendering
-        SubHudRenderer.EndRender();
+            // End the batch and start rendering
+            SubHudRenderer.EndRender();
 
-        // Recover to the normal render SpriteBatch
-        SubHudRenderer.BeginRender();
+            // Recover to the normal render SpriteBatch
+            SubHudRenderer.BeginRender();
+        }
     }
     
-    public Vc2 ParseLevelPositionToHDPosition(Vc2 position, Vc2 parallax, Vc2 staticScreen)
+    public Vc2 ParseLevelPositionToHDPosition(Vc2 inLevelPosition, Vc2 parallax, Vc2 staticScreen)
     {
-        Vc2 normal = position - (MaP.cameraPos - MaP.levelPos) * parallax;
+        Vc2 globalPosition = inLevelPosition + MaP.levelPos;
+        Vc2 cameraPosition = MaP.cameraPos;
+        Vc2 cameraCenter = cameraPosition + Cons.VanillaCanvas * 0.5f;
+        Vc2 screenPosition = parallax == Vc2.One ?
+            (globalPosition - cameraPosition) * Cons.HDScale * (Cons.VanillaCanvas / Cons.VanillaCanvas) :
+            Cons.HDCanvas * ((parallax == Vc2.Zero ? staticScreen / Cons.VanillaCanvas : 0.5f * Vc2.One) + (globalPosition - cameraCenter) * parallax / Cons.VanillaCanvas);
+        // screenPosition is calculated based on 1080p canvas
 
-        return new Vc2(parallax.X == 0 ? StaticScreen.X : normal.X, parallax.Y == 0 ? StaticScreen.Y : normal.Y) * Cons.HDScale;
+        return screenPosition;
     }
 
     public Vc2 ParseGlobalPositionToHDPosition(Vc2 globalPosition, Vc2 parallax, Vc2 staticScreen)
     {
-        Vc2 normal = (globalPosition - MaP.levelPos) - (MaP.cameraPos - MaP.levelPos) * parallax;
-        
-        return new Vc2(parallax.X == 0 ? StaticScreen.X : normal.X, parallax.Y == 0 ? StaticScreen.Y : normal.Y) * Cons.HDScale;
+        Vc2 cameraPosition = MaP.cameraPos;
+        Vc2 cameraCenter = cameraPosition + Cons.VanillaCanvas * 0.5f;
+        Vc2 screenPosition = parallax == Vc2.One ?
+            (globalPosition - cameraPosition) * Cons.HDScale * (Cons.VanillaCanvas / Cons.VanillaCanvas) :
+            Cons.HDCanvas * ((parallax == Vc2.Zero ? staticScreen / Cons.VanillaCanvas : 0.5f * Vc2.One) + (globalPosition - cameraCenter) * parallax / Cons.VanillaCanvas);
+        // screenPosition is calculated based on 1080p canvas
+
+        return screenPosition;
     }
 
     public override void Removed(Scene scene)

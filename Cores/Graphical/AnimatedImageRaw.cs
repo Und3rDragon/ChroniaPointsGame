@@ -1,4 +1,10 @@
-﻿using ChroniaPointsGame.Utils;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Threading.Tasks;
+using ChroniaPointsGame.Utils;
 using Microsoft.Xna.Framework.Graphics;
 
 namespace ChroniaPointsGame.Cores.Graphical;
@@ -38,7 +44,43 @@ public class AnimatedImageRaw
     {
         this.textures.Enter(id, textures);
     }
-    
+
+    // ---- 当前动画数据缓存：动画名与字典内容未变化时不再重复查表 ----
+    private string resolvedAnimation;
+    private List<MTexture> resolvedFrames;
+    private List<int> resolvedFrameSet;
+    private float resolvedInterval = 0.1f;
+    private int resolvedTextureCount = -1;
+    private int resolvedIntervalCount = -1;
+    private int resolvedFrameSetCount = -1;
+
+    /// <summary>
+    /// Re-reads the frames, interval and frame set of <see cref="currentAnimation"/> from the dictionaries.
+    /// Call it after editing those dictionaries while the animation name stays the same.
+    /// </summary>
+    public void Refresh()
+    {
+        resolvedAnimation = currentAnimation;
+        resolvedTextureCount = textures.Count;
+        resolvedIntervalCount = interval.Count;
+        resolvedFrameSetCount = frameSet.Count;
+
+        textures.TryGetValue(currentAnimation, out resolvedFrames);
+        resolvedInterval = interval.TryGetValue(currentAnimation, out float iv) ? iv : 0.1f;
+        frameSet.TryGetValue(currentAnimation, out resolvedFrameSet);
+    }
+
+    private void EnsureResolved()
+    {
+        if (resolvedAnimation != currentAnimation
+            || resolvedTextureCount != textures.Count
+            || resolvedIntervalCount != interval.Count
+            || resolvedFrameSetCount != frameSet.Count)
+        {
+            Refresh();
+        }
+    }
+
     public void Render()
     {
         Render(position);
@@ -50,15 +92,20 @@ public class AnimatedImageRaw
     /// </param>
     public void Render(Vc2 renderPosition)
     {
-        if (!textures.ContainsKey(currentAnimation)) { return; }
-        if (textures[currentAnimation].Count == 0 || textures[currentAnimation].IsNull()) { return; }
-        
-        MTexture asset = textures[currentAnimation][currentFrame.Clamp(0, textures[currentAnimation].Count - 1)];
+        EnsureResolved();
 
-        //asset.Draw(renderPosition + offset, origin, color.Parsed(), scale, rotation.ToRad(), GetSpriteEffect());
-        Draw.SpriteBatch.Draw(asset.Texture.Texture, renderPosition + offset, null, color.Parsed(), rotation.ToRad(),
+        List<MTexture> frames = resolvedFrames;
+        if (frames == null || frames.Count == 0) { return; }
+
+        MTexture asset = frames[currentFrame.Clamp(0, frames.Count - 1)];
+
+        Color parsedColor = color.Parsed();
+        float rad = rotation.ToRad();
+        SpriteEffects fx = GetSpriteEffect();
+
+        Draw.SpriteBatch.Draw(asset.Texture.Texture, renderPosition + offset, null, parsedColor, rad,
             origin * new Vc2(asset.Width, asset.Height),
-             scale, GetSpriteEffect(), depth);
+             scale, fx, depth);
     }
 
     private int frameSetIndex = 0;
@@ -66,31 +113,32 @@ public class AnimatedImageRaw
     {
         if (!playing) { return; }
 
-        if (!textures.ContainsKey(currentAnimation)) { return; }
+        EnsureResolved();
 
-        float dt = interval.ContainsKey(currentAnimation) ? interval[currentAnimation].ClampMin(Engine.DeltaTime) : 0.1f;
+        List<MTexture> frames = resolvedFrames;
+        if (frames == null) { return; }
 
-        if (MaP.scene?.OnInterval(dt)?? false)
+        float dt = resolvedInterval.ClampMin(Engine.DeltaTime);
+
+        if (MaP.scene?.OnInterval(dt) ?? false)
         {
-            if (!frameSet.ContainsKey(currentAnimation))
+            if (resolvedFrameSet == null)
             {
                 currentFrame += reversed ? -1 : 1;
-                
-                if (currentFrame < 0) { currentFrame = loop.SafeGet(currentAnimation, true)? 
-                        textures[currentAnimation].Count - 1 : 0; }
-                if (currentFrame > textures[currentAnimation].Count - 1) { currentFrame = loop.SafeGet(currentAnimation, true) ? 
-                        0 : textures[currentAnimation].Count - 1; }
+
+                bool loopAnim = loop.GetValueOrDefault(currentAnimation, true);
+                if (currentFrame < 0) { currentFrame = loopAnim ? frames.Count - 1 : 0; }
+                if (currentFrame > frames.Count - 1) { currentFrame = loopAnim ? 0 : frames.Count - 1; }
             }
             else
             {
                 frameSetIndex += reversed ? -1 : 1;
 
-                if (frameSetIndex < 0) { frameSetIndex = loop.SafeGet(currentAnimation, true) ? 
-                        frameSet[currentAnimation].Count - 1 : 0; }
-                if (frameSetIndex > frameSet[currentAnimation].Count - 1) { frameSetIndex = loop.SafeGet(currentAnimation, true) ? 
-                        0 : frameSet[currentAnimation].Count - 1; }
+                bool loopAnim = loop.GetValueOrDefault(currentAnimation, true);
+                if (frameSetIndex < 0) { frameSetIndex = loopAnim ? resolvedFrameSet.Count - 1 : 0; }
+                if (frameSetIndex > resolvedFrameSet.Count - 1) { frameSetIndex = loopAnim ? 0 : resolvedFrameSet.Count - 1; }
 
-                currentFrame = frameSet[currentAnimation][frameSetIndex];
+                currentFrame = resolvedFrameSet[frameSetIndex];
             }
         }
     }
@@ -131,9 +179,10 @@ public class AnimatedImageRaw
 
     public int CurrentAnimationLength()
     {
-        if (!textures.ContainsKey(currentAnimation)) { return 0; }
-        if (textures[currentAnimation].IsNull()) { return 0; }
+        EnsureResolved();
 
-        return textures[currentAnimation].Count;
+        if (resolvedFrames == null) { return 0; }
+
+        return resolvedFrames.Count;
     }
 }

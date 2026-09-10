@@ -48,34 +48,121 @@ public class SerialImage
     }
 
     public Vc2 p1, p2;
-    public List<Vc2> segmentPosition;
+    public List<Vc2> segmentPosition = new();
     public Vc2 overallSize = Vc2.Zero;
     public Vc2 segmentStart = Vc2.Zero;
-    public void Measure<T>(IList<T> source, Func<T, int> selector)
-    {
-        p1 = Vc2.Zero; p2 = Vc2.Zero;
-        segmentPosition = new();
-        overallSize = Vc2.Zero;
-        
-        Vc2 cal = Vc2.Zero;
-        
-        for(int i = 0; i < source.Count; i++)
-        {
 
-            MTexture asset = textures[selector(source[i])];
-            
+    // ---- 测量结果缓存：内容与布局参数未变化时复用上一次的测量数据 ----
+    private string cachedStringSource;
+    private object cachedSelector;
+    private float cachedScale;
+    private int cachedRenderMode;
+    private float cachedDistance;
+    private Vc2 cachedSegmentOrigin;
+    private int cachedCount = -1;
+
+    private MTexture[] measuredTextures;
+    private Vc2[] measuredDrawOffsets;
+    private int measuredLength;
+
+    private static bool SameSelector(object a, object b)
+    {
+        if (ReferenceEquals(a, b)) { return true; }
+        if (a is null || b is null) { return false; }
+
+        // 委托按「目标实例 + 方法」比较，调用方每次传入等价的新委托时缓存依然有效
+        return a.Equals(b);
+    }
+
+    private bool MeasureCacheValid(string source, object selector)
+    {
+        return cachedStringSource == source
+            && SameSelector(cachedSelector, selector)
+            && cachedCount == source.Length
+            && cachedScale == scale
+            && cachedRenderMode == renderMode
+            && cachedDistance == distance
+            && cachedSegmentOrigin == segmentOrigin;
+    }
+
+    private void StoreMeasureCache(string source, object selector)
+    {
+        cachedStringSource = source;
+        cachedSelector = selector;
+        cachedCount = source.Length;
+        cachedScale = scale;
+        cachedRenderMode = renderMode;
+        cachedDistance = distance;
+        cachedSegmentOrigin = segmentOrigin;
+    }
+
+    private void PrepareBuffers(int length)
+    {
+        if (measuredTextures == null || measuredTextures.Length < length)
+        {
+            measuredTextures = new MTexture[length];
+            measuredDrawOffsets = new Vc2[length];
+        }
+
+        if (segmentPosition == null)
+        {
+            segmentPosition = new List<Vc2>(length);
+        }
+        else if (segmentPosition.Capacity < length)
+        {
+            segmentPosition.Capacity = length;
+        }
+
+        segmentPosition.Clear();
+    }
+
+    private void FinishMeasure(int length)
+    {
+        measuredLength = length;
+        overallSize = p2 - p1;
+        segmentStart = -p1;
+
+        // 每段的最终绘制偏移在此算好（segmentStart 参与），渲染循环中只做一次加法
+        for (int i = 0; i < length; i++)
+        {
+            MTexture asset = measuredTextures[i];
+            measuredDrawOffsets[i] = segmentStart + segmentPosition[i] - segmentOrigin * new Vc2(asset.Width, asset.Height);
+        }
+    }
+
+    public void Measure(string source, Func<char, int> selector)
+    {
+        if (MeasureCacheValid(source, selector))
+        {
+            return;
+        }
+
+        StoreMeasureCache(source, selector);
+
+        p1 = Vc2.Zero; p2 = Vc2.Zero;
+        PrepareBuffers(source.Length);
+        overallSize = Vc2.Zero;
+
+        Vc2 cal = Vc2.Zero;
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            int idx = selector(source[i]);
+            MTexture asset = textures[idx];
+            measuredTextures[i] = asset;
+
             if (i == 0)
             {
                 p1 = new Vc2(-asset.Width, -asset.Height) * segmentOrigin * scale;
                 p2 = new Vc2(asset.Width, asset.Height) * (Vc2.One - segmentOrigin) * scale;
                 segmentPosition.Add(cal);
-                
+
                 continue;
             }
-            
-            MTexture lastAsset = textures[selector(source[i - 1])];
 
-            if(renderMode == (int)RenderMode.EqualDistance)
+            MTexture lastAsset = measuredTextures[i - 1];
+
+            if (renderMode == (int)RenderMode.EqualDistance)
             {
                 cal.X = cal.X + distance;
             }
@@ -83,7 +170,7 @@ public class SerialImage
             {
                 cal.X = cal.X + lastAsset.Width * (1 - segmentOrigin.X) * scale + asset.Width * segmentOrigin.X * scale + distance;
             }
-            
+
             Vc2 _p1 = cal + new Vc2(-asset.Width, -asset.Height) * segmentOrigin * scale;
             Vc2 _p2 = cal + new Vc2(asset.Width, asset.Height) * (Vc2.One - segmentOrigin) * scale;
 
@@ -94,14 +181,56 @@ public class SerialImage
             p2.X = _p2.X > p2.X ? _p2.X : p2.X;
             p2.Y = _p2.Y > p2.Y ? _p2.Y : p2.Y;
         }
-        
-        overallSize = p2 - p1;
-        segmentStart = - p1;
+
+        FinishMeasure(source.Length);
     }
 
-    public void Measure(string source, Func<char, int> selector)
+    public void Measure<T>(IList<T> source, Func<T, int> selector)
     {
-        Measure(source.ToArray(), selector);
+        p1 = Vc2.Zero; p2 = Vc2.Zero;
+        PrepareBuffers(source.Count);
+        overallSize = Vc2.Zero;
+
+        Vc2 cal = Vc2.Zero;
+
+        for (int i = 0; i < source.Count; i++)
+        {
+            int idx = selector(source[i]);
+            MTexture asset = textures[idx];
+            measuredTextures[i] = asset;
+
+            if (i == 0)
+            {
+                p1 = new Vc2(-asset.Width, -asset.Height) * segmentOrigin * scale;
+                p2 = new Vc2(asset.Width, asset.Height) * (Vc2.One - segmentOrigin) * scale;
+                segmentPosition.Add(cal);
+
+                continue;
+            }
+
+            MTexture lastAsset = measuredTextures[i - 1];
+
+            if (renderMode == (int)RenderMode.EqualDistance)
+            {
+                cal.X = cal.X + distance;
+            }
+            else
+            {
+                cal.X = cal.X + lastAsset.Width * (1 - segmentOrigin.X) * scale + asset.Width * segmentOrigin.X * scale + distance;
+            }
+
+            Vc2 _p1 = cal + new Vc2(-asset.Width, -asset.Height) * segmentOrigin * scale;
+            Vc2 _p2 = cal + new Vc2(asset.Width, asset.Height) * (Vc2.One - segmentOrigin) * scale;
+
+            segmentPosition.Add(cal);
+
+            p1.X = _p1.X < p1.X ? _p1.X : p1.X;
+            p1.Y = _p1.Y < p1.Y ? _p1.Y : p1.Y;
+            p2.X = _p2.X > p2.X ? _p2.X : p2.X;
+            p2.Y = _p2.Y > p2.Y ? _p2.Y : p2.Y;
+        }
+
+        FinishMeasure(source.Count);
     }
 
     public void Render<T>(IList<T> source, Func<T, int> selector)
@@ -116,27 +245,48 @@ public class SerialImage
     {
         Measure(source, selector);
 
-        Vc2 shift = -overallSize * origin;
-
-        //Draw.HollowRect(renderPosition + shift, overallSize.X, overallSize.Y, Color.Orange);
-        
-        for(int i = 0; i < source.Count; i++)
-        {
-            MTexture texture = textures[selector(source[i])];
-            Vc2 dPos = shift + segmentStart + segmentPosition[i];
-
-            bool hasSegOffset = segmentOffset.TryGetValue(i, out Vc2 segOffset);
-
-            texture.Draw(renderPosition + dPos + overallOffset - segmentOrigin * new Vc2(texture.Width, texture.Height) + (hasSegOffset ? segOffset : Vc2.Zero),
-                Vc2.Zero, color.Parsed(), scale, rotation.ToRad(), GetSpriteEffect());
-            //Draw.SpriteBatch.Draw(texture.Texture.Texture, renderPosition + dPos + overallOffset + (hasSegOffset ? segOffset : Vc2.Zero),
-            //    null, color.Parsed(), rotation.ToRad(), segmentOrigin * new Vc2(texture.Width, texture.Height),
-            //    scale, GetSpriteEffect(), depth);
-        }
+        DrawSegments(renderPosition, source.Count);
     }
-    
+
     public void Render(string source, Func<char, int> selector, Vc2 worldPosition)
     {
-        Render(source.ToArray(), selector, worldPosition);
+        Measure(source, selector);
+
+        DrawSegments(worldPosition, source.Length);
+    }
+
+    /// <summary>
+    /// Draws the current measured data. It is used by the container classes which
+    /// have just measured this instance, so no measuring is repeated here.
+    /// </summary>
+    internal void DrawMeasured(Vc2 renderPosition)
+    {
+        DrawSegments(renderPosition, measuredLength);
+    }
+
+    private void DrawSegments(Vc2 renderPosition, int count)
+    {
+        Vc2 anchor = renderPosition - overallSize * origin + overallOffset;
+
+        Color parsedColor = color.Parsed();
+        float rad = rotation.ToRad();
+        SpriteEffects fx = GetSpriteEffect();
+
+        // 未设置分段偏移时完全跳过字典查找
+        bool hasSegmentOffsets = segmentOffset.Count > 0;
+
+        for (int i = 0; i < count; i++)
+        {
+            MTexture texture = measuredTextures[i];
+
+            Vc2 segOffset = Vc2.Zero;
+            if (hasSegmentOffsets)
+            {
+                segmentOffset.TryGetValue(i, out segOffset);
+            }
+
+            texture.Draw(anchor + measuredDrawOffsets[i] + segOffset,
+                Vc2.Zero, parsedColor, scale, rad, fx);
+        }
     }
 }
