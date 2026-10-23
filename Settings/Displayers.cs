@@ -1,13 +1,16 @@
 ﻿using System.Numerics;
-using ChroniaPointsGame.Modules;
 using ChroniaPointsGame.Cores;
-using ChroniaPointsGame.Cores.Graphical;
+using ChroniaPointsGame.Modules;
 using ChroniaPointsGame.Utils;
 
 namespace ChroniaPointsGame.Settings;
 
+/// <summary>
+/// 在游戏 HUD 上显示当前的 Chronia Points 与倍率。
+/// 位置、字号、字距与对齐方式由 Mod 设置中的显示选项控制。
+/// </summary>
 [Tracked(true)]
-public class Displayers : HDRenderEntity
+public class Displayers : Entity
 {
     [LoadHook]
     public static void Load()
@@ -34,7 +37,6 @@ public class Displayers : HDRenderEntity
     {
         if (Instance.IsNotNull())
         {
-            Instance.Buffer?.Dispose();
             self.Remove(Instance);
 
             Instance = null;
@@ -43,27 +45,86 @@ public class Displayers : HDRenderEntity
         orig(self);
     }
 
-    public Displayers(EntityData d, Vc2 o) : base(d, o)
+    public Displayers(EntityData d, Vc2 o) : base(d.Position + o)
     {
-        Tag |= Tags.Global;
+        Tag |= Tags.HUD | Tags.Global;
     }
 
-    protected override void HDRender()
+    public override void Render()
     {
-        if (!ChroniaPointsGameModule.Settings.chroniaPointsDisplayer.enabled) { return; }
-
         var displayer = ChroniaPointsGameModule.Settings.chroniaPointsDisplayer;
-        var displayUI = chroniaPoints_UI;
+        if (!displayer.enabled) { return; }
 
-        displayUI.origin = ((int)displayer.aligning + 4).ToJustify();
-        displayUI.distance = displayer.letterDistance;
-        displayUI.scale = displayer.scale * 0.1f;
+        string target = GetDisplayTarget();
+        if (string.IsNullOrEmpty(target)) { return; }
 
-        displayUI.Render(GetDisplayTarget(), GeneralSelector, GetRenderPosition(displayer.displayPosition,
-            new Vc2(displayer.X, displayer.Y)));
+        DrawText(target, GetRenderPosition(displayer.displayPosition, new Vc2(displayer.X, displayer.Y)),
+            ((int)displayer.aligning + 4).ToJustify(), displayer.scale * 0.1f, displayer.letterDistance);
     }
 
-    // ---- 显示文本缓存：积分与倍率都没变化时复用上一次拼好的字符串 ----
+    /// <summary>
+    /// 以 <paramref name="position"/> 为锚点绘制 HUD 文本。
+    /// <paramref name="justify"/> 决定文本相对锚点的对齐方式，<paramref name="letterDistance"/> 为字间距。
+    /// </summary>
+    private void DrawText(string text, Vc2 position, Vc2 justify, float scale, float letterDistance)
+    {
+        EnsureLayout(text);
+
+        Vc2 anchor = new Vc2(position.X, position.Y - cachedTextHeight * scale * justify.Y);
+        Vc2 textScale = Vc2.One * scale;
+
+        if (letterDistance == 0f)
+        {
+            //ActiveFont.Draw(text, anchor, new Vc2(justify.X, 0f), textScale, Color.White);
+            ActiveFont.DrawOutline(text, anchor, new Vc2(justify.X, 0f), textScale, Color.White, 2f, Color.Black);
+            return;
+        }
+
+        float cursor = anchor.X - (cachedTotalAdvance * scale + letterDistance * (text.Length - 1)) * justify.X;
+
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] != ' ')
+            {
+                //ActiveFont.Draw(text[i], new Vc2(cursor, anchor.Y), Vc2.Zero, textScale, Color.White);
+                ActiveFont.DrawOutline(text[i].ToString(), new Vc2(cursor, anchor.Y), Vc2.Zero, textScale, Color.White, 2f, Color.Black);
+            }
+
+            cursor += cachedAdvances[i] * scale + letterDistance;
+        }
+    }
+
+    // ---- 文本布局：内容不变时复用上一次的测量结果 ----
+    private string cachedLayoutText;
+    private float[] cachedAdvances;
+    private int cachedAdvanceCount;
+    private float cachedTotalAdvance;
+    private float cachedTextHeight;
+
+    private void EnsureLayout(string text)
+    {
+        if (cachedLayoutText == text && cachedAdvanceCount == text.Length) { return; }
+
+        if (cachedAdvances == null || cachedAdvances.Length < text.Length)
+        {
+            cachedAdvances = new float[text.Length];
+        }
+
+        float total = 0f;
+        for (int i = 0; i < text.Length; i++)
+        {
+            float advance = ActiveFont.Measure(text[i]).X;
+            cachedAdvances[i] = advance;
+            total += advance;
+        }
+
+        cachedAdvanceCount = text.Length;
+        cachedTotalAdvance = total;
+        cachedTextHeight = ActiveFont.Measure(text).Y;
+        cachedLayoutText = text;
+    }
+
+    // ---- 显示文本：积分与倍率都没变化时复用上一次拼好的字符串 ----
     private BigInteger cachedPoints;
     private double cachedOverallBase;
     private float cachedOverallPow;
@@ -121,34 +182,9 @@ public class Displayers : HDRenderEntity
         return target;
     }
 
-    // ---- 静态字符映射与 selector：固定引用 + O(1) 查表，避免每字符两次线性扫描 ----
-    private static readonly int[] GeneralCharIndex = BuildGeneralCharIndex();
-    private static readonly Func<char, int> GeneralSelector = static c =>
-    {
-        int idx = GeneralCharIndex[c];
-        return idx >= 0 ? idx : GeneralCharIndex[' '];
-    };
-
-    private static int[] BuildGeneralCharIndex()
-    {
-        var arr = new int[char.MaxValue + 1];
-        Array.Fill(arr, -1);
-        string reference = Cons.DisplayFontsReference;
-        for (int i = 0; i < reference.Length; i++)
-        {
-            if (arr[reference[i]] == -1) { arr[reference[i]] = i; }
-        }
-        // 保证空格映射存在
-        arr[' '] = reference.IndexOf(' ');
-
-        return arr;
-    }
-
-    public SerialImageRaw chroniaPoints_UI = new SerialImageRaw(GFX.Game.GetAtlasSubtextures("ChroniaPointsGame/DisplayFonts/font"))
-    {
-        segmentOrigin = Vc2.Zero,
-    };
-
+    /// <summary>
+    /// 把显示位置换算成 HUD 坐标：跟随玩家时按玩家与相机的相对位置，固定在屏幕时直接取设置值。
+    /// </summary>
     public Vc2 GetRenderPosition(ChroniaPointsGameSettings.DisplayPosition pos, Vc2 setup)
     {
         if (pos == ChroniaPointsGameSettings.DisplayPosition.PlayerBased)

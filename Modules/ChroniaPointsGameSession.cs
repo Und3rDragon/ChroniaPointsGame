@@ -1,15 +1,10 @@
 ﻿using ChroniaPointsGame.Cores;
-using ChroniaPointsGame.Cores.Graphical;
 using YamlDotNet.Serialization;
 
 namespace ChroniaPointsGame.Modules;
 
 public class ChroniaPointsGameSession : EverestModuleSession
 {
-    // Fnt Textures
-    [YamlIgnore]
-    public Dictionary<string, FntData> cachedFntData = new();
-
     // Chronia Points Game
     public HashSet<string> DiscoveredRooms = new();
 

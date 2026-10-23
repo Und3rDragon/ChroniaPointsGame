@@ -13,7 +13,6 @@ global using Sts = ChroniaPointsGame.Modules.ChroniaPointsGameSettings; // usual
 global using Vc2 = Microsoft.Xna.Framework.Vector2;
 global using Vc3 = Microsoft.Xna.Framework.Vector3;
 global using Sens = ChroniaPointsGame.Utils.SensitiveFlags.Sensitivity;
-global using Prm = ChroniaPointsGame.Cores.Graphical.GraphicalParams;
 global using GSav = ChroniaPointsGame.Modules.ChroniaPointsGameGlobalSaveData; // usual
 global using CPGame = ChroniaPointsGame.ChroniaGame.Utils.ChroniaPointsUtils;
 global using PUt = ChroniaPointsGame.Utils.PlayerUtils;
@@ -36,8 +35,6 @@ public static class Constants
 
     public const BindingFlags DefaultBindingFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
     
-    public const string DisplayFontsReference = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-*/.<>()[]{}'\"?!\\:; =,_^";
-
     public const string CommandStopclockID = "ChroniaPointsGame_Debug_CommandStopclock";
 
     public const float HDScale = 6f;

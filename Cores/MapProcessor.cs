@@ -1,5 +1,4 @@
-﻿using ChroniaPointsGame.Cores.Graphical;
-using ChroniaPointsGame.Utils;
+﻿using ChroniaPointsGame.Utils;
 using ChroniaPointsGame.Utils.ChroniaSystem;
 using Microsoft.Xna.Framework.Input;
 using MonoMod.Utils;
